@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<%- include('./partials/head.ejs')%>
+
+    <body>
+        <%- include('./partials/layout.ejs')%>
+            <form method="POST" action="/attempQuiz/<%=quiz_id%>">
+                <%for (let i=0;i<data.length;i++){%>
+                    <div class="">
+                        <label>Question</label>
+                        <h5>
+                            <%=data[i].q%>
+                        </h5>
+                    </div><br>
+                    <div class="">
+                        <label>Answer</label>
+                        <textarea type="text" name="<%= data[i].q_id%>" class="formItem" ></textarea>
+                    </div><br>
+                <%}%>
+                <div class="">
+                    <input type="submit" class="submit" value="Submit" />
+                </div>
+            </form>
+    </body>
+
+</html>

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<%- include('./partials/head.ejs')%>
+
+  <body>
+    <%- include('./partials/layout.ejs') %>
+      <% data.forEach((record)=>{%>
+        <% if(record.user_id !== session.user_id){%>
+        <div class="card">
+          <h3>
+            <%= record.user_name%>
+          </h3>
+          <h3>
+            <%= record.user_email%>
+          </h3>
+          <button ><a href="/view/<%= record.user_id%>">View</a></button>
+        </div>
+        <%}})%>
+          
+  </body>
+</html>

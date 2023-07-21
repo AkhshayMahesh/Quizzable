@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<%- include('./partials/head.ejs')%>
+
+    <body>
+        <%- include('./partials/layout.ejs')%>
+        <h1>Created By<%= doneBy %></h1>
+            <% ans.forEach((reel)=>{ %>
+                <% var temp=act.find((user)=> user.q_id==reel.q_id) %>
+                <h2><%=reel.answer%>:<%=temp.answer%></h2>
+            <%})%>
+        <h1>Score:<%=score%></h1>
+        
+    </body>
+
+</html>
+

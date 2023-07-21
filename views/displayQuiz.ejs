@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+    <%- include('./partials/head.ejs')%>
+<body>
+    <%- include('./partials/layout.ejs')%>
+    <h2>Quiz Title: <%= quiz.quiz_name%></h2>
+    <%data.forEach((Q)=>{%>
+        <h4><%= Q.q%></h4><br>
+        <span><h5><%= Q.answer%></h5></span>
+        <span><button>Edit Question</button></span>
+    <%})%>
+    <button><a href="/addQ/<%= quiz.quiz_id%>">Add Question</a></button>
+</body>
+</html>
