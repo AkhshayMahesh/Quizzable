@@ -7,6 +7,7 @@ var session = require('express-session');
 var database = require('./database');
 const morgan = require('morgan');
 const { error } = require('console');
+const multer = require('multer');
 
 var app = express();
 
@@ -28,24 +29,148 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(morgan('dev'))
 
 app.get('/', function (req, res, next) {
+  var requests, users;
   var query = `SELECT * FROM user_login`;
   database.query(query, (error, data) => {
-    // Array.from(data).forEach(element => {
-    //   console.log(element.user_name)
-    // });
-    // console.log(data)
-    res.render("home", { title: 'Home', data: Array.from(data), session: req.session })
+    if (error) console.log(error);
+    else {
+      users = Array.from(data);
+      if (req.session.user_id) {
+        var query = `SELECT * FROM friends WHERE fr_id=?`;
+        database.query(query, [req.session.user_id], (error, data) => {
+          if (error) console.log(error);
+          else {
+              requests = Array.from(data)
+              // var query= `DELETE FROM friends WHERE status=? AND fr_id=?`;
+              // database.query(query, ["d", req.session.user_id],(error, data)=>{
+              //   if(error) console.log(error);
+              //   else{
+              //   }
+              // })
+              res.render("home", { title: 'Home', data: users, requests: requests, session: req.session })
+          }
+        })
+      }else{
+        res.render("home", { title: 'Home', data: users, requests: requests, session: req.session })
+      }
+    }
   })
-  
 });
+
+app.get("/acceptRequest/:id", (req, res) => {
+  var id = req.params.id;
+  var query = `UPDATE friends SET status=? WHERE user_id=? AND fr_id=?`;
+  database.query(query, ["a", id, req.session.user_id], (error, data) => {
+    if (error) console.log(error);
+    else {
+      res.redirect("/")
+    }
+  })
+})
+
+app.get("/declineRequest/:id", (req, res) => {
+  var id = req.params.id;
+  var query = `UPDATE friends SET status=? WHERE user_id=? AND fr_id=?`;
+  database.query(query, ["d", id, req.session.user_id], (error, data) => {
+    if (error) console.log(error);
+    else {
+      res.redirect("/")
+    }
+  })
+})
 
 app.get('/about', function (req, res, next) {
   res.render('about', { title: 'About', session: req.session });
 });
 
+const addQuizName = async (attempts) => {
+  attempts.forEach((attempt) => {
+    var query = `SELECT quiz_name FROM quizlist WHERE quiz_id=?`
+    database.query(query, [attempt.quiz_id], (error, data) => {
+      if (error) console.log(error);
+      else {
+        // console.log(data)
+        attempt.quiz_name = data[0].quiz_name;
+      }
+    })
+  })
+  return attempts;
+}
+
+app.get('/view/:id', (req, res) => {
+  var id = req.params.id;
+  var attempts, user, frlist, isFriend=false, isPending=false, temp,status;
+  if (!id) {
+    res.redirect('/login');
+  }
+  var query = `SELECT * FROM user_login WHERE user_id=?`;
+  database.query(query, [id], (error, data) => {
+    if (error) console.log(error);
+    else {
+      user = data[0]
+      var query = `SELECT * FROM quizlist WHERE user_id=?`;
+      database.query(query, [id], (error, response) => {
+        if (error) console.log(error);
+        else {
+          var query = `SELECT * FROM user_scores WHERE user_id=?`
+          database.query(query, [id], async (error, data) => {
+            if (error) console.log(error);
+            else {
+              attempts = await addQuizName(Array.from(data))
+              var query = `SELECT * FROM friends WHERE user_id=?`;
+              database.query(query, [req.session.user_id], (error, data) => {
+                if (error) console.log(error);
+                else {
+                  if (data) {
+                    frlist = Array.from(data)
+                    // console.log(frlist);
+                    if (id != req.session.user_id) {
+                      temp =  frlist.find((user) =>  user.fr_id == id )
+                      // console.log(temp);
+                    }
+                  }
+                  res.render('profile', { title: 'Profile', user: user, quizlist: Array.from(response), attempts: attempts, isPending, isFriend,temp, friends: frlist, session: req.session });
+                }
+              })
+            }
+          })
+        }
+      })
+    }
+  })
+})
+
+const upload = multer({
+  dest: 'public/images',
+  fileFilter: (req, file, cb) => {
+    if (
+      file.mimetype === 'image/jpeg' ||
+      file.mimetype === 'image/jpg' ||
+      file.mimetype === 'image/png'
+    ) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, JPG, and PNG files are allowed.'));
+    }
+  },
+});
+
+app.post('/upload', upload.single('image'), async (req, res) => {
+  const imagePath = `${req.file.filename}`;
+  const query = 'UPDATE user_login SET image = ? WHERE user_id= ?';
+  database.query(query, [imagePath, req.session.user_id], (error, data) => {
+    if (error) console.log(error);
+    else res.redirect(`/view/${req.session.user_id}`);
+  });
+});
+
+app.get('/public/image/:path', (req, res) => {
+  res.sendFile(`../public/images/${req.params.path}`)
+})
+
 app.get('/create', (req, res) => {
   if (!req.session.user_id) {
-    console.log(req.session)
+    // console.log(req.session)
     res.redirect('/login')
   } else {
     res.render('create', { title: 'Create', session: req.session })
@@ -53,11 +178,11 @@ app.get('/create', (req, res) => {
 })
 
 app.post('/create', (req, res) => {
-  const { quiz_name, quiz_desc } = req.body
+  const { quiz_name, quiz_desc, type } = req.body
   if (quiz_name) {
     var id = req.session.user_id;
-    var query = `INSERT INTO quizlist (user_id, quiz_name, quiz_desc) values (?,?,?) `;
-    database.query(query, [id, quiz_name, quiz_desc], (error, dat) => {
+    var query = `INSERT INTO quizlist (user_id, quiz_name, quiz_desc, type) values (?,?,?,?) `;
+    database.query(query, [id, quiz_name, quiz_desc, type], (error, dat) => {
       if (error) console.log(error);
       else {
         var query = `SELECT quiz_id FROM quizlist WHERE quiz_name=? AND user_id=?`;
@@ -107,15 +232,38 @@ app.post('/addQ/:id', (req, res) => {
   }
 })
 
-app.get('/attemptQuiz/:id', (req, res) => {
-  var quiz_id = req.params.id;
-  var query = `SELECT * FROM qs WHERE quiz_id=?`;
-
-  database.query(query, [quiz_id], (error, data) => {
+app.get("/requestFriend/:id", (req, res) => {
+  var fr_id = req.params.id;
+  var user_id = req.session.user_id;
+  var status = "p";
+  var query = `INSERT INTO friends VALUES (?,?,?)`;
+  database.query(query, [user_id, fr_id, status], (error, data) => {
     if (error) console.log(error);
     else {
-      var result = shuffle(Array.from(data))
-      res.render('attemptQuiz', { title: 'Attempt', data: result, quiz_id: quiz_id, session: req.session });
+      res.redirect(`/view/${fr_id}`)
+    }
+  })
+
+})
+
+app.get('/attemptQuiz/:id', (req, res) => {
+  var quiz_id = req.params.id;
+  var query = `SELECT * FROM user_scores WHERE user_id=? AND quiz_id=?`;
+  database.query(query, [req.session.user_id, quiz_id], (error, data) => {
+    if (error) console.log(error)
+    else {
+      if (!data[0]) {
+        var query = `SELECT * FROM qs WHERE quiz_id=?`;
+        database.query(query, [quiz_id], (error, data) => {
+          if (error) console.log(error);
+          else {
+            var result = shuffle(Array.from(data))
+            res.render('attemptQuiz', { title: 'Attempt', data: result, quiz_id: quiz_id, session: req.session });
+          }
+        })
+      } else {
+        res.redirect(`/report/${quiz_id}`);
+      }
     }
   })
 })
@@ -133,90 +281,82 @@ const shuffle = (arr) => {
 app.post('/attempQuiz/:id', (req, res) => {
   var quiz_id = req.params.id;
   let id = req.session.user_id;
-  var user_name;
-  var score = 0;
-  // console.log(req.session)
-  // var query = `SELECT user_name FROM user_login WHERE user_id=?`;
-  // database.query(query, [id], (error, data) => {
-  //   if (error) console.log(error);
-  //   user_name = data[0]['user_name'];
-  // })
-  // const promise = new Promise((resolve, reject) => {
   for (let ans in req.body) {
     var query = `INSERT INTO response VALUES(?, ?, ?, ?)`;
     database.query(query, [parseInt(quiz_id), parseInt(ans), id, req.body[ans]], (error, data) => {
       if (error) console.log(error)
     })
   }
-  // }
-  console.log(score)
-  // resolve(score)
-  // })
-  // .then((score) => {
-
-  // console.log(score)
-  res.redirect(`/scores?quiz_id=${quiz_id}&body=${JSON.stringify(req.body)}`)
-  // })
+  res.redirect(`/report/${quiz_id}`)
 })
 
-const allSpacesRemoved = (str) => { return str.replaceAll(' ', '') };
+const allSpacesRemoved = (str) => { return (str.replaceAll(' ', '')).toLowerCase() };
 
-app.get('/scores', async (req, res) => {
-  var score = 0;
-  var arr = Array.from(await JSON.parse(req.query.body))
-  arr.forEach((ans) => {
-    var query = `SELECT answer FROM qs WHERE q_id= ? `;
-    database.query(query, [parseInt(ans)], async (error, data) => {
-      var real = await allSpacesRemoved(data[0].answer.toLowerCase());
-      // var real = data[0].answer;
-      // console.log(real)
-      var reel = await allSpacesRemoved(req.body[ans].toLowerCase());
-      // var reel = req.body[ans]
-      console.log(reel == real)
-      if (reel == real) {
-        score++;
-      }
-    })
-  })
-  console.log(score)
-  var query = `INSERT INTO user_scores VALUES(?, ?, ?, 0 ,?)`;
-  database.query(query, [req.session.user_id, req.query.quiz_id, score, req.query.body], (error, data) => {
-    if (error) { console.log(error); }
-    else {
-      res.redirect(`/report/${req.query.quiz_id}`)
-    }
-  })
-})
+function wrap() {
+  return new Promise((resolve) => setTimeout(resolve, 2000));
+}
 
-app.get('/report/:id', (req, res) => {
+const calculateScore = async (reels, reals) => {
+  // console.log(reels, reals)
+  var sum = 0
+  for (let i = 0; i < reels.length; i++) {
+    let temp = reals.find((user) => user.q_id == reels[i].q_id);
+    if (await allSpacesRemoved(temp.answer) == await allSpacesRemoved(reels[i].answer)) sum++;
+  }
+  return sum;
+}
+
+app.get('/report/:id', async (req, res) => {
   var quiz_id = req.params.id;
   var reels, reals, createdBy, score, cid;
   var query = `SELECT * FROM response WHERE user_id=? AND quiz_id=?`;
   database.query(query, [req.session.user_id, quiz_id], (error, data) => {
     if (error) console.log(error);
-    else reels = Array.from(data);
-    // console.log(data)
-  })
-  var query= `SELECT user_id from quizlist WHERE quiz_id= ?`;
-  database.query(query, [quiz_id],(error, data)=>{
-    console.log(data)
-    cid = data[0].user_id;
-  })
-  var query = `SELECT score FROM user_scores WHERE user_id=? AND quiz_id=?`;
-  database.query(query, [req.session.user_id, quiz_id], (error, data) => {
-    if (error) console.log(error);
-    else score = data[0].score;
-  })
-  var query = `SELECT * FROM qs WHERE quiz_id=?`;
-  database.query(query, [quiz_id], (error, data) => {
-    if (error) console.log(error);
     else {
-      reals = Array.from(data);
-      console.log(reals, reels)
-      res.render('report', { title: "Report",ans: reels, act: reals ,score:score, doneBy: createdBy, session: req.session});
+      reels = Array.from(data);
+      var query = `SELECT user_id from quizlist WHERE quiz_id= ?`;
+      database.query(query, [quiz_id], (error, data) => {
+        if (error) console.log(error)
+        else {
+          cid = data[0].user_id;
+          var query = `SELECT user_name FROM user_login WHERE user_id=?`;
+          database.query(query, [cid], (error, data) => {
+            if (error) console.log(error)
+            else {
+              createdBy = data[0].user_name;
+              var query = `SELECT * FROM qs WHERE quiz_id=?`;
+              database.query(query, [quiz_id], async (error, data) => {
+                if (error) console.log(error);
+                else {
+                  reals = Array.from(data);
+                  var query = `SELECT score FROM user_scores WHERE user_id=? AND quiz_id=?`;
+                  database.query(query, [req.session.user_id, quiz_id], async (error, data) => {
+                    if (error) console.log(error);
+                    else {
+                      if (data[0]) {
+                        // console.log(data[0]);
+                        score = data[0].score;
+                        res.render('report', { title: "Report", ans: reels, act: reals, score: score, doneBy: createdBy, session: req.session });
+                      }
+                      else {
+                        score = await calculateScore(reels, reals);
+                        // console.log(score)
+                        var query = `INSERT INTO user_scores VALUES(?, ?, ?, 0 ,?)`;
+                        database.query(query, [req.session.user_id, quiz_id, score, req.query.body], (error, data) => {
+                          if (error) console.log(error);
+                          else res.render('report', { title: "Report", ans: reels, act: reals, score: score, doneBy: createdBy, session: req.session });
+                        })
+                      }
+                    }
+                  })
+                }
+              })
+            }
+          })
+        }
+      })
     }
   })
-
 })
 
 app.get('/signup', function (req, res) {
@@ -286,23 +426,6 @@ app.post('/login', function (req, res, next) {
   }
 });
 
-app.get('/view/:id', (req, res) => {
-  var id = req.params.id;
-  if (!id) {
-    res.redirect('/login');
-  }
-  var query = `SELECT * FROM user_login WHERE user_id=?`;
-  database.query(query, [id], (error, data) => {
-    if (error) console.log(error);
-    else {
-      var query = `SELECT * FROM quizlist WHERE user_id=?`;
-      database.query(query, [id], (error, response) => {
-        if (error) console.log(error);
-        res.render('profile', { title: 'Profile', user: data[0], quizlist: Array.from(response), session: req.session });
-      })
-    }
-  })
-})
 app.get('/logout', function (req, res, next) {
   req.session.destroy();
   res.redirect("/");

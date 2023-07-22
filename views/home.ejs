@@ -4,6 +4,24 @@
 
   <body>
     <%- include('./partials/layout.ejs') %>
+      <% if(requests){ %>
+        <% requests.forEach((request)=>{%>
+          <%if(request.status=="p"){%>
+            <div class="card">
+              <h4><%=request.user_id%> has requested</h4>
+              <span><button><a href="/acceptRequest/<%=request.user_id%>">Accept request</a></button></span>
+              <span><button><a href="/declineRequest/<%=request.user_id%>">Decline request</a></button></span>
+            </div>
+          <%}%>
+          <!-- <%if(request.user_id== session.user_id && request.status=="d"){%>
+            <div class="card">
+              <h4><%=request.user_id%> has declined</h4>
+              <span><button><a href="/requestFriend/<%=request.user_id%>">Request Again</a></button></span>
+            </div>
+          <%}%> -->
+        <%})%>
+      <%}%>
+      
       <% data.forEach((record)=>{%>
         <% if(record.user_id !== session.user_id){%>
         <div class="card">
