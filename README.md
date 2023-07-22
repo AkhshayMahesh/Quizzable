@@ -1,4 +1,4 @@
-Tech Stacks used:
+Tech Stack used:
 Node/ Express for backend,
  ejs for view engine
 
